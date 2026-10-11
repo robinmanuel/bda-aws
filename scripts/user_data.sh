@@ -45,13 +45,13 @@ fi
 
 # Create production environment file
 cat <<EOF > "$APP_DIR/.env"
-DB_HOST=${DB_HOST}
+DB_HOST=notes-db.c8dyocgsipef.us-east-1.rds.amazonaws.com
 DB_PORT=3306
-DB_USER=${DB_USER:-admin}
-DB_PASSWORD=${DB_PASSWORD}
-DB_NAME=${DB_NAME:-diarydb}
-S3_BUCKET_NAME=${S3_BUCKET_NAME}
-AWS_REGION=${AWS_REGION:-us-east-1}
+DB_USER=admin
+DB_PASSWORD=SecurePass123!
+DB_NAME=notes-db
+S3_BUCKET_NAME=notes-bucket-assignment-116
+AWS_REGION=us-east-1
 PORT=80
 EOF
 

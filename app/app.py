@@ -31,6 +31,25 @@ if not app.config["USE_LOCAL_STORAGE"]:
 # -------------------------------------------------------------
 # Database Helper Functions
 # -------------------------------------------------------------
+def ensure_database():
+    """Connects to MySQL server and creates the target database if it doesn't exist yet."""
+    if not app.config["USE_SQLITE"] and app.config["DB_HOST"]:
+        try:
+            conn = pymysql.connect(
+                host=app.config["DB_HOST"],
+                port=app.config["DB_PORT"],
+                user=app.config["DB_USER"],
+                password=app.config["DB_PASSWORD"],
+                connect_timeout=5,
+                autocommit=True
+            )
+            with conn.cursor() as cursor:
+                cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{app.config['DB_NAME']}` DEFAULT CHARACTER SET utf8mb4;")
+            conn.close()
+            print(f"[INFO] Ensured database `{app.config['DB_NAME']}` exists.")
+        except Exception as e:
+            print(f"[WARN] ensure_database error: {e}")
+
 def get_db_connection():
     """Returns a connection to AWS RDS MySQL or fallback SQLite."""
     if app.config["USE_SQLITE"]:
@@ -38,17 +57,34 @@ def get_db_connection():
         conn.row_factory = sqlite3.Row
         return conn, "sqlite"
     else:
-        conn = pymysql.connect(
-            host=app.config["DB_HOST"],
-            port=app.config["DB_PORT"],
-            user=app.config["DB_USER"],
-            password=app.config["DB_PASSWORD"],
-            database=app.config["DB_NAME"],
-            cursorclass=pymysql.cursors.DictCursor,
-            connect_timeout=5,
-            autocommit=True
-        )
-        return conn, "mysql"
+        try:
+            conn = pymysql.connect(
+                host=app.config["DB_HOST"],
+                port=app.config["DB_PORT"],
+                user=app.config["DB_USER"],
+                password=app.config["DB_PASSWORD"],
+                database=app.config["DB_NAME"],
+                cursorclass=pymysql.cursors.DictCursor,
+                connect_timeout=5,
+                autocommit=True
+            )
+            return conn, "mysql"
+        except pymysql.err.OperationalError as e:
+            # Error 1049: Unknown database -> create it automatically and reconnect
+            if len(e.args) > 0 and e.args[0] == 1049:
+                ensure_database()
+                conn = pymysql.connect(
+                    host=app.config["DB_HOST"],
+                    port=app.config["DB_PORT"],
+                    user=app.config["DB_USER"],
+                    password=app.config["DB_PASSWORD"],
+                    database=app.config["DB_NAME"],
+                    cursorclass=pymysql.cursors.DictCursor,
+                    connect_timeout=5,
+                    autocommit=True
+                )
+                return conn, "mysql"
+            raise
 
 def init_db():
     """Initializes diary_entries table if it doesn't exist and migrates columns."""
@@ -239,14 +275,13 @@ def index():
         conn, db_type = get_db_connection()
         if db_type == "sqlite":
             cursor = conn.cursor()
-            cursor.execute("SELECT id, title, content, mood, image_s3_key, created_at FROM diary_entries ORDER BY id DESC")
+            cursor.execute("SELECT id, title, content, image_s3_key, created_at FROM diary_entries ORDER BY id DESC")
             raw_entries = cursor.fetchall()
             entries = [
                 {
                     "id": r["id"],
                     "title": r["title"],
                     "content": r["content"],
-                    "mood": r["mood"] if "mood" in r.keys() and r["mood"] else "calm",
                     "image_url": get_image_url(r["image_s3_key"]),
                     "created_at": r["created_at"],
                     "display_date": format_entry_date(r["created_at"])
@@ -255,14 +290,13 @@ def index():
             ]
         else:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT id, title, content, mood, image_s3_key, created_at FROM diary_entries ORDER BY id DESC")
+                cursor.execute("SELECT id, title, content, image_s3_key, created_at FROM diary_entries ORDER BY id DESC")
                 raw_entries = cursor.fetchall()
                 entries = [
                     {
                         "id": r["id"],
                         "title": r["title"],
                         "content": r["content"],
-                        "mood": r.get("mood") or "calm",
                         "image_url": get_image_url(r["image_s3_key"]),
                         "created_at": r["created_at"],
                         "display_date": format_entry_date(r["created_at"])
@@ -290,7 +324,6 @@ def create_entry():
     """Handles submission of a new diary entry and optional image upload."""
     title = request.form.get("title", "").strip()
     content = request.form.get("content", "").strip()
-    mood = request.form.get("mood", "calm").strip()
     image_file = request.files.get("image")
 
     if not title or not content:
@@ -311,15 +344,15 @@ def create_entry():
         if db_type == "sqlite":
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO diary_entries (title, content, mood, image_s3_key, created_at) VALUES (?, ?, ?, ?, ?)",
-                (title, content, mood, image_key, now_str)
+                "INSERT INTO diary_entries (title, content, image_s3_key, created_at) VALUES (?, ?, ?, ?)",
+                (title, content, image_key, now_str)
             )
             conn.commit()
         else:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "INSERT INTO diary_entries (title, content, mood, image_s3_key, created_at) VALUES (%s, %s, %s, %s, %s)",
-                    (title, content, mood, image_key, now_str)
+                    "INSERT INTO diary_entries (title, content, image_s3_key, created_at) VALUES (%s, %s, %s, %s)",
+                    (title, content, image_key, now_str)
                 )
         conn.close()
         flash("Entry saved to your journal.", "success")
