@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Personal Diary — Quiet Thoughts</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body>
 
   <!-- Subtle Warm Ambient Lights -->
@@ -20,8 +24,8 @@
     <div class="header-inner">
       <div class="journal-brand">
         <div>
-          <h1 class="journal-title">My Journal</h1>
-          <p class="journal-tagline">A warm, quiet space for thoughts and memories</p>
+          <h1 class="journal-title">Online Personal Diary</h1>
+
         </div>
       </div>
     </div>
@@ -31,16 +35,16 @@
 
     <!-- Flash Alerts -->
     {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="alerts-wrapper">
-          {% for category, message in messages %}
-            <div class="toast-alert toast-{{ category }}">
-              <span>{{ message }}</span>
-              <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
+    {% if messages %}
+    <div class="alerts-wrapper">
+      {% for category, message in messages %}
+      <div class="toast-alert toast-{{ category }}">
+        <span>{{ message }}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
     {% endwith %}
 
     <div class="journal-columns">
@@ -58,19 +62,22 @@
 
             <!-- Title Input -->
             <div class="field-wrap">
-              <input type="text" id="title" name="title" class="journal-input title-input" placeholder="Title of this page..." required autofocus>
+              <input type="text" id="title" name="title" class="journal-input title-input"
+                placeholder="Title of this page..." required autofocus>
             </div>
 
             <!-- Content Area (Diary lines) -->
             <div class="field-wrap">
-              <textarea id="content" name="content" class="journal-input content-textarea" rows="8" placeholder="Dear Diary, today..." required></textarea>
+              <textarea id="content" name="content" class="journal-input content-textarea" rows="8"
+                placeholder="Dear Diary, today..." required></textarea>
             </div>
 
             <!-- Memory Photo Attachment (Polaroid Style) -->
             <div class="field-wrap">
               <div class="photo-attach-box" id="dropArea">
-                <input type="file" id="image" name="image" accept="image/*" class="photo-file-input" onchange="previewMemory(this)">
-                
+                <input type="file" id="image" name="image" accept="image/*" class="photo-file-input"
+                  onchange="previewMemory(this)">
+
                 <div class="photo-placeholder" id="photoPlaceholder">
                   <span class="photo-hint">Add a snapshot photo</span>
                   <span class="photo-subtext">Preserved safely in cloud storage</span>
@@ -78,7 +85,8 @@
 
                 <div class="polaroid-preview" id="polaroidPreview" style="display: none;">
                   <img id="imagePreview" src="" alt="Memory Preview">
-                  <button type="button" class="polaroid-remove" onclick="removeMemoryPhoto()" title="Remove photo">&times;</button>
+                  <button type="button" class="polaroid-remove" onclick="removeMemoryPhoto()"
+                    title="Remove photo">&times;</button>
                   <span class="polaroid-caption">Attached photo</span>
                 </div>
               </div>
@@ -100,41 +108,43 @@
       <section class="journal-archive">
         <div class="archive-header">
           <h2 class="archive-title">Past Entries</h2>
-          <span class="archive-count">{{ entries|length }} {% if entries|length == 1 %}entry{% else %}entries{% endif %}</span>
+          <span class="archive-count">{{ entries|length }} {% if entries|length == 1 %}entry{% else %}entries{% endif
+            %}</span>
         </div>
 
         {% if entries %}
-          <div class="entries-stream">
-            {% for entry in entries %}
-              <article class="journal-card">
-                
-                <div class="card-meta">
-                  <span class="entry-timestamp">{{ entry.display_date }}</span>
+        <div class="entries-stream">
+          {% for entry in entries %}
+          <article class="journal-card">
 
-                  <form action="{{ url_for('delete_entry', entry_id=entry.id) }}" method="POST" onsubmit="return confirm('Remove this memory from your diary?');">
-                    <button type="submit" class="entry-del-btn" title="Delete entry">&times;</button>
-                  </form>
-                </div>
+            <div class="card-meta">
+              <span class="entry-timestamp">{{ entry.display_date }}</span>
 
-                <h3 class="entry-heading">{{ entry.title }}</h3>
-                <p class="entry-text">{{ entry.content }}</p>
+              <form action="{{ url_for('delete_entry', entry_id=entry.id) }}" method="POST"
+                onsubmit="return confirm('Remove this memory from your diary?');">
+                <button type="submit" class="entry-del-btn" title="Delete entry">&times;</button>
+              </form>
+            </div>
 
-                {% if entry.image_url %}
-                  <div class="polaroid-frame">
-                    <a href="{{ entry.image_url }}" target="_blank" title="View full size photo">
-                      <img src="{{ entry.image_url }}" alt="{{ entry.title }}" loading="lazy">
-                    </a>
-                  </div>
-                {% endif %}
+            <h3 class="entry-heading">{{ entry.title }}</h3>
+            <p class="entry-text">{{ entry.content }}</p>
 
-              </article>
-            {% endfor %}
-          </div>
+            {% if entry.image_url %}
+            <div class="polaroid-frame">
+              <a href="{{ entry.image_url }}" target="_blank" title="View full size photo">
+                <img src="{{ entry.image_url }}" alt="{{ entry.title }}" loading="lazy">
+              </a>
+            </div>
+            {% endif %}
+
+          </article>
+          {% endfor %}
+        </div>
         {% else %}
-          <div class="empty-journal">
-            <h3>Your journal is empty</h3>
-            <p>Write your thoughts on the left page. Everything is safely backed up in your cloud database.</p>
-          </div>
+        <div class="empty-journal">
+          <h3>Your journal is empty</h3>
+          <p>Write your thoughts on the left page. Everything is safely backed up in your cloud database.</p>
+        </div>
         {% endif %}
 
       </section>
@@ -142,10 +152,9 @@
     </div>
   </main>
 
-  <footer class="journal-footer">
-    <p>Written with care &bull; Preserved privately across AWS VPC, EC2, RDS &amp; S3</p>
-  </footer>
+
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
+
 </html>
