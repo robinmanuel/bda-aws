@@ -51,7 +51,7 @@ def get_db_connection():
         return conn, "mysql"
 
 def init_db():
-    """Initializes diary_entries table if it doesn't exist."""
+    """Initializes diary_entries table if it doesn't exist and migrates columns."""
     try:
         conn, db_type = get_db_connection()
         with conn:
@@ -62,10 +62,16 @@ def init_db():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         title TEXT NOT NULL,
                         content TEXT NOT NULL,
+                        mood TEXT DEFAULT 'calm',
                         image_s3_key TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
                 """)
+                # Migrate mood column if table already existed without it
+                try:
+                    cursor.execute("ALTER TABLE diary_entries ADD COLUMN mood TEXT DEFAULT 'calm'")
+                except Exception:
+                    pass
                 conn.commit()
             else:
                 with conn.cursor() as cursor:
@@ -74,10 +80,15 @@ def init_db():
                             id INT AUTO_INCREMENT PRIMARY KEY,
                             title VARCHAR(255) NOT NULL,
                             content TEXT NOT NULL,
+                            mood VARCHAR(50) DEFAULT 'calm',
                             image_s3_key VARCHAR(255),
                             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
                     """)
+                    try:
+                        cursor.execute("ALTER TABLE diary_entries ADD COLUMN mood VARCHAR(50) DEFAULT 'calm'")
+                    except Exception:
+                        pass
         conn.close()
         print("[INFO] Database initialized successfully.")
     except Exception as e:
@@ -202,6 +213,19 @@ def get_ec2_metadata():
             "public_ipv4": "N/A"
         }
 
+def format_entry_date(date_val):
+    """Formats datetime into a cozy journal date string like 'Sunday, Oct 11 • 7:45 PM'."""
+    if not date_val:
+        return ""
+    try:
+        if isinstance(date_val, str):
+            dt = datetime.strptime(date_val, "%Y-%m-%d %H:%M:%S")
+        else:
+            dt = date_val
+        return dt.strftime("%A, %b %d • %I:%M %p")
+    except Exception:
+        return str(date_val)
+
 # -------------------------------------------------------------
 # Application Routes
 # -------------------------------------------------------------
@@ -215,29 +239,33 @@ def index():
         conn, db_type = get_db_connection()
         if db_type == "sqlite":
             cursor = conn.cursor()
-            cursor.execute("SELECT id, title, content, image_s3_key, created_at FROM diary_entries ORDER BY id DESC")
+            cursor.execute("SELECT id, title, content, mood, image_s3_key, created_at FROM diary_entries ORDER BY id DESC")
             raw_entries = cursor.fetchall()
             entries = [
                 {
                     "id": r["id"],
                     "title": r["title"],
                     "content": r["content"],
+                    "mood": r["mood"] if "mood" in r.keys() and r["mood"] else "calm",
                     "image_url": get_image_url(r["image_s3_key"]),
-                    "created_at": r["created_at"]
+                    "created_at": r["created_at"],
+                    "display_date": format_entry_date(r["created_at"])
                 }
                 for r in raw_entries
             ]
         else:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT id, title, content, image_s3_key, created_at FROM diary_entries ORDER BY id DESC")
+                cursor.execute("SELECT id, title, content, mood, image_s3_key, created_at FROM diary_entries ORDER BY id DESC")
                 raw_entries = cursor.fetchall()
                 entries = [
                     {
                         "id": r["id"],
                         "title": r["title"],
                         "content": r["content"],
+                        "mood": r.get("mood") or "calm",
                         "image_url": get_image_url(r["image_s3_key"]),
-                        "created_at": r["created_at"]
+                        "created_at": r["created_at"],
+                        "display_date": format_entry_date(r["created_at"])
                     }
                     for r in raw_entries
                 ]
@@ -247,11 +275,13 @@ def index():
         flash(f"Database error: {str(e)}", "danger")
 
     ec2_info = get_ec2_metadata()
+    today_str = datetime.now().strftime("%A, %B %d, %Y")
     return render_template(
         "index.html",
         entries=entries,
         ec2_info=ec2_info,
         db_status=db_status,
+        today_str=today_str,
         config=app.config
     )
 
@@ -260,6 +290,7 @@ def create_entry():
     """Handles submission of a new diary entry and optional image upload."""
     title = request.form.get("title", "").strip()
     content = request.form.get("content", "").strip()
+    mood = request.form.get("mood", "calm").strip()
     image_file = request.files.get("image")
 
     if not title or not content:
@@ -280,18 +311,18 @@ def create_entry():
         if db_type == "sqlite":
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO diary_entries (title, content, image_s3_key, created_at) VALUES (?, ?, ?, ?)",
-                (title, content, image_key, now_str)
+                "INSERT INTO diary_entries (title, content, mood, image_s3_key, created_at) VALUES (?, ?, ?, ?, ?)",
+                (title, content, mood, image_key, now_str)
             )
             conn.commit()
         else:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "INSERT INTO diary_entries (title, content, image_s3_key, created_at) VALUES (%s, %s, %s, %s)",
-                    (title, content, image_key, now_str)
+                    "INSERT INTO diary_entries (title, content, mood, image_s3_key, created_at) VALUES (%s, %s, %s, %s, %s)",
+                    (title, content, mood, image_key, now_str)
                 )
         conn.close()
-        flash("Diary entry saved successfully!", "success")
+        flash("Entry saved to your journal.", "success")
     except Exception as e:
         flash(f"Failed to save entry: {str(e)}", "danger")
 

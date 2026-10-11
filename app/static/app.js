@@ -1,125 +1,146 @@
-// Image Upload Preview Handler
-function previewImage(input) {
+// =============================================================================
+// Personal Diary — Chill UI & Abstracted AWS Telemetry Controller
+// =============================================================================
+
+// 1. Polaroid Memory Photo Preview
+function previewMemory(input) {
   const file = input.files[0];
-  const dropPlaceholder = document.getElementById("dropPlaceholder");
-  const previewWrap = document.getElementById("previewWrap");
-  const imagePreview = document.getElementById("imagePreview");
+  const placeholder = document.getElementById("photoPlaceholder");
+  const preview = document.getElementById("polaroidPreview");
+  const img = document.getElementById("imagePreview");
 
   if (file) {
     const reader = new FileReader();
     reader.onload = function(e) {
-      imagePreview.src = e.target.result;
-      previewWrap.style.display = "inline-block";
-      dropPlaceholder.style.display = "none";
+      img.src = e.target.result;
+      preview.style.display = "inline-block";
+      placeholder.style.display = "none";
     };
     reader.readAsDataURL(file);
   }
 }
 
-function clearImageUpload() {
+function removeMemoryPhoto() {
   const input = document.getElementById("image");
-  const dropPlaceholder = document.getElementById("dropPlaceholder");
-  const previewWrap = document.getElementById("previewWrap");
-  const imagePreview = document.getElementById("imagePreview");
+  const placeholder = document.getElementById("photoPlaceholder");
+  const preview = document.getElementById("polaroidPreview");
+  const img = document.getElementById("imagePreview");
 
   input.value = "";
-  imagePreview.src = "";
-  previewWrap.style.display = "none";
-  dropPlaceholder.style.display = "block";
+  img.src = "";
+  preview.style.display = "none";
+  placeholder.style.display = "flex";
 }
 
-// Architecture Modal Handlers
-function openArchModal() {
-  document.getElementById("archModal").style.display = "flex";
+// 2. Slide-Over Architecture Drawer Handlers
+function openArchDrawer() {
+  const drawer = document.getElementById("archDrawer");
+  const overlay = document.getElementById("archDrawerOverlay");
+  if (drawer && overlay) {
+    drawer.classList.add("open");
+    overlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
 }
 
-function closeArchModal() {
-  document.getElementById("archModal").style.display = "none";
+function closeArchDrawer() {
+  const drawer = document.getElementById("archDrawer");
+  const overlay = document.getElementById("archDrawerOverlay");
+  if (drawer && overlay) {
+    drawer.classList.remove("open");
+    overlay.classList.remove("open");
+    document.body.style.overflow = "";
+  }
 }
 
-window.addEventListener("click", function(event) {
-  const modal = document.getElementById("archModal");
-  if (event.target === modal) {
-    modal.style.display = "none";
+// Close drawer on Escape key
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape") {
+    closeArchDrawer();
   }
 });
 
-// Live AWS Infrastructure Status Checker
-async function fetchLiveStatus() {
-  const spinner = document.getElementById("statusSpinner");
-  const btn = document.getElementById("refreshStatusBtn");
-  
+// 3. Live AWS Infrastructure Telemetry Fetcher
+async function refreshSpecs() {
+  const spinner = document.getElementById("specsSpinner");
+  const btn = document.getElementById("drawerRefreshBtn");
+
   if (spinner) spinner.classList.add("active");
   if (btn) btn.disabled = true;
 
   try {
     const resp = await fetch("/api/status");
-    if (!resp.ok) throw new Error("Status check failed");
+    if (!resp.ok) throw new Error("Status API returned error");
     const data = await resp.json();
 
-    // Update EC2 Info
+    // Update Header Cloud Sync Chip
+    const syncLabel = document.getElementById("cloudSyncLabel");
+    if (syncLabel) {
+      if (data.ec2 && data.ec2.is_ec2) {
+        syncLabel.textContent = "AWS Cloud Synced";
+      } else {
+        syncLabel.textContent = "Cloud Synced";
+      }
+    }
+
+    // Update Compute Spec (EC2)
     if (data.ec2) {
-      document.getElementById("statEc2Id").textContent = data.ec2.instance_id || "N/A";
-      document.getElementById("statEc2Az").textContent = data.ec2.availability_zone || "N/A";
-      document.getElementById("statEc2Ip").textContent = data.ec2.local_ipv4 || "N/A";
+      const ec2Id = document.getElementById("drawerEc2Id");
+      const ec2Az = document.getElementById("drawerEc2Az");
+      const ec2Ip = document.getElementById("drawerEc2Ip");
+      const ec2Status = document.getElementById("drawerEc2Status");
 
-      const ec2Pill = document.getElementById("ec2StatusPill");
-      if (data.ec2.is_ec2) {
-        ec2Pill.textContent = "EC2 LIVE";
-        ec2Pill.className = "status-pill status-ok";
-      } else {
-        ec2Pill.textContent = "DEV HOST";
-        ec2Pill.className = "status-pill status-warn";
+      if (ec2Id) ec2Id.textContent = data.ec2.instance_id || "N/A";
+      if (ec2Az) ec2Az.textContent = data.ec2.availability_zone || "N/A";
+      if (ec2Ip) ec2Ip.textContent = data.ec2.local_ipv4 || "127.0.0.1";
+      if (ec2Status) {
+        ec2Status.textContent = data.ec2.is_ec2 ? "EC2 LIVE" : "DEV HOST";
       }
     }
 
-    // Update RDS Info
+    // Update Database Spec (RDS)
     if (data.rds) {
-      const rdsPill = document.getElementById("rdsStatusPill");
-      const rdsLatency = document.getElementById("statRdsLatency");
-      
-      if (data.rds.connected) {
-        rdsPill.textContent = "CONNECTED";
-        rdsPill.className = "status-pill status-ok";
+      const rdsHost = document.getElementById("drawerRdsHost");
+      const rdsLatency = document.getElementById("drawerRdsLatency");
+      const rdsStatus = document.getElementById("drawerRdsStatus");
+
+      if (rdsHost && data.rds.engine) {
+        rdsHost.textContent = data.rds.engine.length > 22 ? data.rds.engine.substring(0, 22) + "..." : data.rds.engine;
+      }
+      if (rdsLatency) {
         rdsLatency.textContent = `${data.rds.latency_ms} ms`;
-      } else {
-        rdsPill.textContent = "DISCONNECTED";
-        rdsPill.className = "status-pill status-warn";
-        rdsLatency.textContent = "ERR";
+      }
+      if (rdsStatus) {
+        rdsStatus.textContent = data.rds.connected ? "CONNECTED" : "DISCONNECTED";
       }
     }
 
-    // Update S3 Info
+    // Update Storage Spec (S3)
     if (data.s3) {
-      const s3Pill = document.getElementById("s3StatusPill");
-      const s3Bucket = document.getElementById("statS3Bucket");
-      const s3Auth = document.getElementById("statS3Auth");
+      const s3Bucket = document.getElementById("drawerS3Bucket");
+      const s3Auth = document.getElementById("drawerS3Auth");
+      const s3Status = document.getElementById("drawerS3Status");
 
-      if (data.s3.bucket) {
+      if (s3Bucket && data.s3.bucket) {
         s3Bucket.textContent = data.s3.bucket;
       }
-      if (data.s3.auth) {
+      if (s3Auth && data.s3.auth) {
         s3Auth.textContent = data.s3.auth;
       }
-
-      if (data.s3.connected) {
-        s3Pill.textContent = data.s3.bucket ? "S3 ONLINE" : "LOCAL READY";
-        s3Pill.className = "status-pill status-ok";
-      } else {
-        s3Pill.textContent = "ERROR";
-        s3Pill.className = "status-pill status-warn";
+      if (s3Status) {
+        s3Status.textContent = data.s3.bucket ? "S3 ONLINE" : "READY (LOCAL)";
       }
     }
 
   } catch (err) {
-    console.error("Failed to query live status:", err);
+    console.error("Telemetry fetch error:", err);
   } finally {
     if (spinner) spinner.classList.remove("active");
     if (btn) btn.disabled = false;
   }
 }
 
-// Initial status fetch on page load
+// Initial fetch on page load
 document.addEventListener("DOMContentLoaded", () => {
-  fetchLiveStatus();
+  refreshSpecs();
 });

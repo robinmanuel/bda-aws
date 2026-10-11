@@ -3,352 +3,355 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CloudDiary | AWS 3-Tier Personal Diary</title>
+  <title>Personal Diary — Quiet Thoughts</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
-  <!-- Top Navigation Bar -->
-  <header class="navbar">
-    <div class="nav-container">
-      <div class="brand">
-        <div class="brand-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-            <path d="M12 6v6"/>
-            <path d="M9 9h6"/>
-          </svg>
-        </div>
+  <!-- Ambient Background Glows -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <!-- Minimal Header -->
+  <header class="journal-header">
+    <div class="header-inner">
+      <div class="journal-brand">
+        <span class="journal-bookmark">🔖</span>
         <div>
-          <h1 class="brand-title">CloudDiary</h1>
-          <p class="brand-subtitle">AWS VPC &bull; EC2 &bull; RDS &bull; S3</p>
+          <h1 class="journal-title">My Journal</h1>
+          <p class="journal-tagline">A quiet place for thoughts and memories</p>
         </div>
       </div>
 
-      <div class="nav-actions">
-        <button id="refreshStatusBtn" class="btn btn-secondary btn-sm" onclick="fetchLiveStatus()">
-          <span class="refresh-spinner" id="statusSpinner"></span>
-          <span>Refresh AWS Status</span>
-        </button>
-        <button class="btn btn-primary btn-sm" onclick="openArchModal()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="16" x2="12" y2="12"/>
-            <line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-          <span>Architecture Info</span>
+      <div class="header-right">
+        <!-- Abstracted Cloud Sync Indicator Button -->
+        <button class="cloud-sync-chip" id="cloudSyncBtn" onclick="openArchDrawer()" title="Click to inspect AWS 3-Tier Infrastructure">
+          <span class="sync-dot"></span>
+          <span class="sync-label" id="cloudSyncLabel">Cloud Synced</span>
+          <span class="sync-aws-tag">AWS</span>
         </button>
       </div>
     </div>
   </header>
 
-  <main class="main-container">
+  <main class="journal-layout">
 
-    <!-- Flash Messages -->
+    <!-- Flash Alerts -->
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="alerts-container">
+        <div class="alerts-wrapper">
           {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">
+            <div class="toast-alert toast-{{ category }}">
               <span>{{ message }}</span>
-              <button type="button" class="close-alert" onclick="this.parentElement.remove()">&times;</button>
+              <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
             </div>
           {% endfor %}
         </div>
       {% endif %}
     {% endwith %}
 
-    <!-- AWS Architecture Live Diagnostics Banner -->
-    <section class="arch-banner" id="archBanner">
-      <div class="arch-banner-header">
-        <div class="live-indicator">
-          <span class="pulse-dot"></span>
-          <span class="live-text">Live AWS Infrastructure Topology</span>
-        </div>
-        <span class="vpc-tag">VPC: 10.0.0.0/16</span>
-      </div>
+    <div class="journal-columns">
 
-      <div class="tier-grid">
-        <!-- Tier 1: EC2 Application -->
-        <div class="tier-card tier-ec2">
-          <div class="tier-card-header">
-            <div class="tier-badge">Public Subnet</div>
-            <span class="status-pill status-ok" id="ec2StatusPill">EC2 ONLINE</span>
-          </div>
-          <div class="tier-title-row">
-            <div class="tier-icon">⚡</div>
-            <div>
-              <h3>App Compute Tier</h3>
-              <p class="tier-subtext">EC2 Instance</p>
+      <!-- Left Column: The Diary Writing Desk -->
+      <section class="journal-desk">
+        <div class="desk-paper">
+          <div class="paper-header">
+            <div class="date-stamp">
+              <span class="date-icon">📅</span>
+              <span class="date-text">{{ today_str }}</span>
             </div>
-          </div>
-          <div class="tier-details">
-            <div class="detail-row">
-              <span class="label">Instance ID:</span>
-              <span class="val font-mono" id="statEc2Id">{{ ec2_info.instance_id }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="label">AZ:</span>
-              <span class="val font-mono" id="statEc2Az">{{ ec2_info.availability_zone }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="label">Private IP:</span>
-              <span class="val font-mono" id="statEc2Ip">{{ ec2_info.local_ipv4 }}</span>
-            </div>
-          </div>
-          <div class="tier-footer">
-            <span class="security-note">&#128274; Security Group Port 80 / 5000</span>
-          </div>
-        </div>
-
-        <!-- Connection Arrow 1 -->
-        <div class="tier-connector">
-          <div class="connector-line"></div>
-          <span class="connector-tag">Private SQL (3306)</span>
-        </div>
-
-        <!-- Tier 2: RDS Database -->
-        <div class="tier-card tier-rds">
-          <div class="tier-card-header">
-            <div class="tier-badge private-badge">Private Subnet</div>
-            <span class="status-pill status-ok" id="rdsStatusPill">{{ db_status | upper }}</span>
-          </div>
-          <div class="tier-title-row">
-            <div class="tier-icon">🗄️</div>
-            <div>
-              <h3>Database Tier</h3>
-              <p class="tier-subtext">AWS RDS MySQL</p>
-            </div>
-          </div>
-          <div class="tier-details">
-            <div class="detail-row">
-              <span class="label">Endpoint:</span>
-              <span class="val font-mono" id="statRdsHost">
-                {% if config.DB_HOST %}{{ config.DB_HOST[:22] }}...{% else %}SQLite Local{% endif %}
-              </span>
-            </div>
-            <div class="detail-row">
-              <span class="label">Isolation:</span>
-              <span class="val text-green font-mono">No Public IP / Private</span>
-            </div>
-            <div class="detail-row">
-              <span class="label">Latency:</span>
-              <span class="val font-mono" id="statRdsLatency">-- ms</span>
-            </div>
-          </div>
-          <div class="tier-footer">
-            <span class="security-note">&#128274; Inbound only from EC2-SG</span>
-          </div>
-        </div>
-
-        <!-- Connection Arrow 2 -->
-        <div class="tier-connector">
-          <div class="connector-line"></div>
-          <span class="connector-tag">IAM Role (boto3)</span>
-        </div>
-
-        <!-- Tier 3: S3 Cloud Storage -->
-        <div class="tier-card tier-s3">
-          <div class="tier-card-header">
-            <div class="tier-badge storage-badge">Object Storage</div>
-            <span class="status-pill status-ok" id="s3StatusPill">
-              {% if config.USE_LOCAL_STORAGE %}LOCAL MODE{% else %}S3 READY{% endif %}
-            </span>
-          </div>
-          <div class="tier-title-row">
-            <div class="tier-icon">🪣</div>
-            <div>
-              <h3>Storage Tier</h3>
-              <p class="tier-subtext">AWS S3 Photos</p>
-            </div>
-          </div>
-          <div class="tier-details">
-            <div class="detail-row">
-              <span class="label">Bucket:</span>
-              <span class="val font-mono" id="statS3Bucket">
-                {% if config.S3_BUCKET_NAME %}{{ config.S3_BUCKET_NAME }}{% else %}local-uploads{% endif %}
-              </span>
-            </div>
-            <div class="detail-row">
-              <span class="label">Public Access:</span>
-              <span class="val text-green font-mono">Blocked (Private)</span>
-            </div>
-            <div class="detail-row">
-              <span class="label">Credentials:</span>
-              <span class="val font-mono" id="statS3Auth">EC2 IAM Role</span>
-            </div>
-          </div>
-          <div class="tier-footer">
-            <span class="security-note">&#128274; Zero hardcoded secret keys</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Main Content Area: Form & Entries Feed -->
-    <div class="content-layout">
-
-      <!-- Left Column: Add Entry Form -->
-      <section class="form-section">
-        <div class="card form-card">
-          <div class="card-header">
-            <h2>New Diary Entry</h2>
-            <p>Write your thoughts. Attached photos are stored securely in S3.</p>
+            <span class="pen-icon">✍️</span>
           </div>
 
-          <form action="{{ url_for('create_entry') }}" method="POST" enctype="multipart/form-data" id="entryForm">
-            <div class="form-group">
-              <label for="title">Entry Title <span class="required">*</span></label>
-              <input type="text" id="title" name="title" placeholder="e.g. Deployed 3-Tier Architecture on AWS" required>
+          <form action="{{ url_for('create_entry') }}" method="POST" enctype="multipart/form-data" id="diaryForm">
+            
+            <!-- Mood / Vibe Selector -->
+            <div class="mood-selection">
+              <label class="mood-title">Today's Vibe</label>
+              <div class="mood-options">
+                <label class="mood-pill">
+                  <input type="radio" name="mood" value="calm" checked>
+                  <span>🌿 Calm</span>
+                </label>
+                <label class="mood-pill">
+                  <input type="radio" name="mood" value="cozy">
+                  <span>☕ Cozy</span>
+                </label>
+                <label class="mood-pill">
+                  <input type="radio" name="mood" value="grateful">
+                  <span>✨ Grateful</span>
+                </label>
+                <label class="mood-pill">
+                  <input type="radio" name="mood" value="thoughtful">
+                  <span>💭 Reflective</span>
+                </label>
+                <label class="mood-pill">
+                  <input type="radio" name="mood" value="night">
+                  <span>🌙 Late Night</span>
+                </label>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label for="content">Dear Diary... <span class="required">*</span></label>
-              <textarea id="content" name="content" rows="5" placeholder="Reflect on your day, project milestones, or personal notes..." required></textarea>
+            <!-- Title Input -->
+            <div class="field-wrap">
+              <input type="text" id="title" name="title" class="journal-input title-input" placeholder="Give this memory a title..." required autofocus>
             </div>
 
-            <div class="form-group">
-              <label for="image">Attach Photo / Snapshot (Optional)</label>
-              <div class="file-drop-area" id="dropArea">
-                <input type="file" id="image" name="image" accept="image/*" class="file-input" onchange="previewImage(this)">
-                <div class="file-drop-placeholder" id="dropPlaceholder">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                    <polyline points="21 15 16 10 5 21"/>
-                  </svg>
-                  <p>Click or drag image to upload</p>
-                  <span>Uploaded directly to private S3 bucket</span>
+            <!-- Content Area (Diary lines) -->
+            <div class="field-wrap">
+              <textarea id="content" name="content" class="journal-input content-textarea" rows="7" placeholder="Dear Diary, today felt like..." required></textarea>
+            </div>
+
+            <!-- Memory Photo Attachment (Polaroid Style) -->
+            <div class="field-wrap">
+              <div class="photo-attach-box" id="dropArea">
+                <input type="file" id="image" name="image" accept="image/*" class="photo-file-input" onchange="previewMemory(this)">
+                
+                <div class="photo-placeholder" id="photoPlaceholder">
+                  <span class="camera-icon">📷</span>
+                  <span class="photo-hint">Pin a photo or snapshot to this page</span>
+                  <span class="photo-subtext">Safely preserved in cloud storage</span>
                 </div>
-                <div class="file-preview-wrap" id="previewWrap" style="display: none;">
-                  <img id="imagePreview" src="" alt="Preview">
-                  <button type="button" class="remove-file-btn" onclick="clearImageUpload()">&times;</button>
+
+                <div class="polaroid-preview" id="polaroidPreview" style="display: none;">
+                  <img id="imagePreview" src="" alt="Memory Preview">
+                  <button type="button" class="polaroid-remove" onclick="removeMemoryPhoto()" title="Remove photo">&times;</button>
+                  <span class="polaroid-caption">Memory preview</span>
                 </div>
               </div>
             </div>
 
-            <button type="submit" class="btn btn-primary btn-block">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/>
-                <polyline points="7 3 7 8 15 8"/>
-              </svg>
-              <span>Save Entry to Cloud</span>
-            </button>
+            <!-- Save Button -->
+            <div class="paper-footer">
+              <button type="submit" class="save-memory-btn">
+                <span>Save to Journal</span>
+                <span class="btn-arrow">→</span>
+              </button>
+            </div>
+
           </form>
         </div>
       </section>
 
-      <!-- Right Column: Diary Entries List -->
-      <section class="entries-section">
-        <div class="entries-header">
-          <div>
-            <h2>Your Diary Timeline</h2>
-            <p>{{ entries|length }} {% if entries|length == 1 %}entry{% else %}entries{% endif %} recorded in RDS</p>
-          </div>
+      <!-- Right Column: Journal Timeline Feed -->
+      <section class="journal-archive">
+        <div class="archive-header">
+          <h2 class="archive-title">Past Entries</h2>
+          <span class="archive-count">{{ entries|length }} {% if entries|length == 1 %}memory{% else %}memories{% endif %}</span>
         </div>
 
         {% if entries %}
-          <div class="entries-list">
+          <div class="entries-stream">
             {% for entry in entries %}
-              <article class="entry-card">
-                <div class="entry-card-top">
-                  <span class="entry-date">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                      <line x1="16" y1="2" x2="16" y2="6"/>
-                      <line x1="8" y1="2" x2="8" y2="6"/>
-                      <line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    {{ entry.created_at }}
-                  </span>
-                  
-                  <form action="{{ url_for('delete_entry', entry_id=entry.id) }}" method="POST" onsubmit="return confirm('Delete this diary entry and remove image from S3?');">
-                    <button type="submit" class="btn-delete" title="Delete entry">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      </svg>
-                    </button>
+              <article class="journal-card">
+                
+                <div class="card-meta">
+                  <div class="meta-left">
+                    <span class="entry-timestamp">{{ entry.display_date }}</span>
+                    {% if entry.mood %}
+                      <span class="entry-mood-badge mood-{{ entry.mood }}">
+                        {% if entry.mood == 'calm' %}🌿 Calm
+                        {% elif entry.mood == 'cozy' %}☕ Cozy
+                        {% elif entry.mood == 'grateful' %}✨ Grateful
+                        {% elif entry.mood == 'thoughtful' %}💭 Reflective
+                        {% elif entry.mood == 'night' %}🌙 Late Night
+                        {% else %}{{ entry.mood }}{% endif %}
+                      </span>
+                    {% endif %}
+                  </div>
+
+                  <form action="{{ url_for('delete_entry', entry_id=entry.id) }}" method="POST" onsubmit="return confirm('Remove this memory from your diary?');">
+                    <button type="submit" class="entry-del-btn" title="Delete entry">&times;</button>
                   </form>
                 </div>
 
-                <h3 class="entry-title">{{ entry.title }}</h3>
-                <p class="entry-content">{{ entry.content }}</p>
+                <h3 class="entry-heading">{{ entry.title }}</h3>
+                <p class="entry-text">{{ entry.content }}</p>
 
                 {% if entry.image_url %}
-                  <div class="entry-image-container">
-                    <a href="{{ entry.image_url }}" target="_blank" title="View full image in S3">
+                  <div class="polaroid-frame">
+                    <a href="{{ entry.image_url }}" target="_blank" title="View full size photo">
                       <img src="{{ entry.image_url }}" alt="{{ entry.title }}" loading="lazy">
                     </a>
-                    <span class="s3-image-badge">&#128274; S3 Presigned URL</span>
                   </div>
                 {% endif %}
+
               </article>
             {% endfor %}
           </div>
         {% else %}
-          <div class="empty-state">
+          <div class="empty-journal">
             <div class="empty-icon">📖</div>
-            <h3>Your Diary is Empty</h3>
-            <p>Write your very first memory using the form on the left. The text will be stored in your private RDS database and any attached photo will be preserved in your S3 bucket!</p>
+            <h3>Your journal is fresh and quiet</h3>
+            <p>Pour your thoughts into the page on the left. Everything is kept safe and private in your cloud vault.</p>
           </div>
         {% endif %}
+
       </section>
 
     </div>
   </main>
 
-  <!-- Architecture Explainer Modal -->
-  <div class="modal-backdrop" id="archModal" style="display: none;">
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <h2>AWS 3-Tier Security Architecture</h2>
-        <button class="modal-close" onclick="closeArchModal()">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p class="modal-intro">
-          This Personal Diary demonstrates defense-in-depth on AWS using VPC isolation, IAM instance profiles, and strict Security Group rules:
-        </p>
+  <!-- ================================================================= -->
+  <!-- Abstracted Cloud Architecture Slide-Over Drawer -->
+  <!-- ================================================================= -->
+  <div class="drawer-overlay" id="archDrawerOverlay" onclick="closeArchDrawer()"></div>
 
-        <div class="arch-flow">
-          <div class="flow-step">
-            <span class="step-num">1</span>
-            <div>
-              <strong>Public Subnet &amp; EC2:</strong>
-              <p>The Flask application runs on an EC2 instance inside the VPC Public Subnet. Inbound HTTP traffic (port 80) is accepted via the Internet Gateway (IGW).</p>
-            </div>
-          </div>
-          <div class="flow-step">
-            <span class="step-num">2</span>
-            <div>
-              <strong>Private Subnet &amp; RDS:</strong>
-              <p>The MySQL database lives in a Private Subnet with no Internet Gateway route and no public IP. Inbound MySQL traffic (port 3306) is locked specifically to <code>DiaryApp-EC2-SG</code>. Public internet cannot connect directly to RDS.</p>
-            </div>
-          </div>
-          <div class="flow-step">
-            <span class="step-num">3</span>
-            <div>
-              <strong>IAM Instance Profile &amp; S3:</strong>
-              <p>The EC2 instance uses an attached AWS IAM Role to upload and retrieve photos from an S3 bucket with Block Public Access enabled. Temporary presigned URLs are generated for viewing, avoiding exposed API keys.</p>
-            </div>
-          </div>
+  <aside class="arch-drawer" id="archDrawer">
+    <div class="drawer-header">
+      <div class="drawer-title-group">
+        <span class="cloud-icon">☁️</span>
+        <div>
+          <h2>Cloud Infrastructure &amp; Security</h2>
+          <p>AWS 3-Tier Architecture Telemetry</p>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeArchModal()">Got it</button>
-      </div>
+      <button class="drawer-close" onclick="closeArchDrawer()">&times;</button>
     </div>
-  </div>
 
-  <footer class="footer">
-    <div class="footer-container">
-      <p>Personal Diary Cloud Project &bull; Built with AWS VPC, EC2, RDS, and S3</p>
+    <div class="drawer-content">
+      
+      <!-- Quick Abstracted Summary -->
+      <div class="cloud-summary-box">
+        <div class="summary-shield">🛡️</div>
+        <div>
+          <h4>Private &amp; Secure Cloud Storage</h4>
+          <p>Your diary entries are saved directly into a dedicated private MySQL database, and memories/photos are kept in private S3 storage without hardcoded keys.</p>
+        </div>
+      </div>
+
+      <!-- Action & Refresh -->
+      <div class="drawer-refresh-bar">
+        <span class="live-pulse-badge"><span class="pulse-light"></span> Live VPC Telemetry</span>
+        <button class="refresh-specs-btn" id="drawerRefreshBtn" onclick="refreshSpecs()">
+          <span class="refresh-spinner" id="specsSpinner"></span>
+          <span>Check Status</span>
+        </button>
+      </div>
+
+      <!-- 3-Tier Technical Grid -->
+      <div class="specs-grid">
+        
+        <!-- Tier 1: EC2 Application -->
+        <div class="spec-card">
+          <div class="spec-header">
+            <span class="spec-layer">Public Subnet</span>
+            <span class="spec-status-pill status-ok" id="drawerEc2Status">ONLINE</span>
+          </div>
+          <div class="spec-name">
+            <span class="spec-emoji">⚡</span>
+            <div>
+              <h3>Compute Layer</h3>
+              <small>AWS EC2 Application Server</small>
+            </div>
+          </div>
+          <div class="spec-table">
+            <div class="spec-row">
+              <span>Instance ID:</span>
+              <strong class="font-mono" id="drawerEc2Id">{{ ec2_info.instance_id }}</strong>
+            </div>
+            <div class="spec-row">
+              <span>Availability Zone:</span>
+              <strong class="font-mono" id="drawerEc2Az">{{ ec2_info.availability_zone }}</strong>
+            </div>
+            <div class="spec-row">
+              <span>Private IPv4:</span>
+              <strong class="font-mono" id="drawerEc2Ip">{{ ec2_info.local_ipv4 }}</strong>
+            </div>
+          </div>
+          <p class="spec-security">🔒 Serves web interface via HTTP Port 80</p>
+        </div>
+
+        <!-- Tier 2: RDS MySQL Database -->
+        <div class="spec-card">
+          <div class="spec-header">
+            <span class="spec-layer layer-private">Private Subnet</span>
+            <span class="spec-status-pill status-ok" id="drawerRdsStatus">{{ db_status | upper }}</span>
+          </div>
+          <div class="spec-name">
+            <span class="spec-emoji">🗄️</span>
+            <div>
+              <h3>Database Layer</h3>
+              <small>AWS RDS MySQL</small>
+            </div>
+          </div>
+          <div class="spec-table">
+            <div class="spec-row">
+              <span>Isolation:</span>
+              <strong class="font-mono text-green">No Public IP / Private</strong>
+            </div>
+            <div class="spec-row">
+              <span>Endpoint:</span>
+              <strong class="font-mono" id="drawerRdsHost">
+                {% if config.DB_HOST %}{{ config.DB_HOST[:20] }}...{% else %}SQLite Local{% endif %}
+              </strong>
+            </div>
+            <div class="spec-row">
+              <span>Ping Latency:</span>
+              <strong class="font-mono" id="drawerRdsLatency">-- ms</strong>
+            </div>
+          </div>
+          <p class="spec-security">🔒 Inbound port 3306 restricted strictly to EC2-SG</p>
+        </div>
+
+        <!-- Tier 3: S3 Cloud Storage -->
+        <div class="spec-card">
+          <div class="spec-header">
+            <span class="spec-layer layer-storage">Object Storage</span>
+            <span class="spec-status-pill status-ok" id="drawerS3Status">
+              {% if config.USE_LOCAL_STORAGE %}LOCAL MODE{% else %}S3 READY{% endif %}
+            </span>
+          </div>
+          <div class="spec-name">
+            <span class="spec-emoji">🪣</span>
+            <div>
+              <h3>Storage Layer</h3>
+              <small>AWS S3 Memory Photos</small>
+            </div>
+          </div>
+          <div class="spec-table">
+            <div class="spec-row">
+              <span>Bucket:</span>
+              <strong class="font-mono" id="drawerS3Bucket">
+                {% if config.S3_BUCKET_NAME %}{{ config.S3_BUCKET_NAME }}{% else %}local-uploads{% endif %}
+              </strong>
+            </div>
+            <div class="spec-row">
+              <span>Public Access:</span>
+              <strong class="font-mono text-green">Blocked (Private)</strong>
+            </div>
+            <div class="spec-row">
+              <span>Auth Method:</span>
+              <strong class="font-mono" id="drawerS3Auth">EC2 IAM Role</strong>
+            </div>
+          </div>
+          <p class="spec-security">🔒 Delivers photos via short-lived Presigned URLs</p>
+        </div>
+
+      </div>
+
+      <!-- Security Architecture Flow Explainer -->
+      <div class="drawer-architecture-flow">
+        <h3>How It Works</h3>
+        <ol class="flow-list">
+          <li><strong>VPC Isolation:</strong> The EC2 server lives in the public subnet to receive web traffic, while RDS resides safely in the private subnet without internet exposure.</li>
+          <li><strong>Zero Exposed DB:</strong> Only requests originating from the EC2 security group can query the database.</li>
+          <li><strong>Credential-less S3:</strong> EC2 uses AWS IAM Instance Profiles to upload photos without saving any secret keys on the server.</li>
+        </ol>
+      </div>
+
     </div>
+
+    <div class="drawer-footer">
+      <button class="drawer-done-btn" onclick="closeArchDrawer()">Back to Journal</button>
+    </div>
+  </aside>
+
+  <footer class="journal-footer">
+    <p>Written with care &bull; Preserved privately across AWS VPC, EC2, RDS &amp; S3</p>
   </footer>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
