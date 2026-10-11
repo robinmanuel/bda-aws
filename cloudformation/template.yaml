@@ -1,0 +1,384 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS CloudFormation Template for Personal Diary Cloud Application.
+  Demonstrates secure 3-tier cloud communication:
+  - VPC with Public and Private Subnets across 2 Availability Zones
+  - EC2 Web Server in Public Subnet (HTTP Port 80)
+  - RDS MySQL Database in Private Subnet (Port 3306 restricted strictly to EC2 Security Group)
+  - Private S3 Bucket for diary photos accessed securely via EC2 IAM Instance Profile
+
+Parameters:
+  EnvironmentName:
+    Description: Environment prefix for resource naming
+    Type: String
+    Default: PersonalDiary
+
+  DBUsername:
+    Description: Master username for the RDS MySQL database
+    Type: String
+    Default: admin
+    MinLength: 4
+    MaxLength: 16
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+
+  DBPassword:
+    Description: Master password for RDS (Min 8 characters, alphanumeric + symbols)
+    Type: String
+    NoEcho: true
+    Default: DiaryPass2026!
+    MinLength: 8
+
+  InstanceType:
+    Description: EC2 Instance Type for the web application
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t3.small
+
+  LatestAmiId:
+    Description: Latest Amazon Linux 2023 AMI from AWS Systems Manager
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  # ============================================================================
+  # 1. NETWORKING LAYER (VPC, SUBNETS, INTERNET GATEWAY, ROUTE TABLES)
+  # ============================================================================
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-VPC"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-IGW"
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Public Subnet (AZ 1) - Houses EC2 Application Server
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-Public-Subnet"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-Public-RT"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # Private Subnet 1 (AZ 1) - Database Layer
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-Private-Subnet-1"
+
+  # Private Subnet 2 (AZ 2) - Database Layer (Required for RDS Multi-AZ subnet group)
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-Private-Subnet-2"
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-Private-RT"
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # ============================================================================
+  # 2. SECURITY GROUPS (Demonstrates Strict Least-Privilege Network Isolation)
+  # ============================================================================
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP and SSH access to Diary EC2 Web Server
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Allow public web HTTP traffic
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: Allow SSH access for administration
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-EC2-SG"
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow MySQL access ONLY from the EC2 Security Group
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+          Description: Allow MySQL from EC2 app layer only (Zero direct internet access)
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-RDS-SG"
+
+  # ============================================================================
+  # 3. STORAGE LAYER (AWS S3) & IAM INSTANCE PROFILE
+  # ============================================================================
+  DiaryS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "diary-storage-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-S3-Bucket"
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-EC2-S3-Role-${AWS::Region}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ec2.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: S3DiaryAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${DiaryS3Bucket}"
+                  - !Sub "arn:aws:s3:::${DiaryS3Bucket}/*"
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # ============================================================================
+  # 4. DATABASE LAYER (AWS RDS MySQL in Private Subnet)
+  # ============================================================================
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private Subnet Group for Diary RDS Instance
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-DB-Subnet-Group"
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${EnvironmentName}-db"
+      AllocatedStorage: 20
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: '8.0'
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBName: diarydb
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      PubliclyAccessible: false
+      MultiAZ: false
+      StorageType: gp2
+      DeleteAutomatedBackups: true
+      SkipFinalSnapshot: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-RDS-MySQL"
+
+  # ============================================================================
+  # 5. COMPUTE LAYER (AWS EC2 Instance in Public Subnet)
+  # ============================================================================
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: RDSInstance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-App-Server"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -ex
+          echo "[+] Updating packages..."
+          dnf update -y
+
+          echo "[+] Installing Python 3.11, git..."
+          dnf install -y python3.11 python3.11-pip git
+
+          APP_DIR="/opt/diary-app"
+          mkdir -p "$APP_DIR"
+          cd "$APP_DIR"
+
+          echo "[+] Cloning diary application repository..."
+          git clone https://github.com/robinmanuel/bda-aws.git repo_temp || true
+          if [ -d "repo_temp/app" ]; then
+              cp -r repo_temp/app/* "$APP_DIR/"
+              rm -rf repo_temp
+          fi
+
+          python3.11 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install flask pymysql cryptography boto3 python-dotenv gunicorn werkzeug
+
+          # Write configuration environment file with RDS & S3 details
+          cat <<EOF > "$APP_DIR/.env"
+          DB_HOST=${RDSInstance.Endpoint.Address}
+          DB_PORT=3306
+          DB_USER=${DBUsername}
+          DB_PASSWORD=${DBPassword}
+          DB_NAME=diarydb
+          S3_BUCKET_NAME=${DiaryS3Bucket}
+          AWS_REGION=${AWS::Region}
+          PORT=80
+          EOF
+
+          mkdir -p "$APP_DIR/static/uploads"
+          chmod -R 755 "$APP_DIR"
+
+          # Configure and start systemd service
+          cat <<EOF > /etc/systemd/system/diary.service
+          [Unit]
+          Description=AWS Personal Diary 3-Tier Application
+          After=network.target
+
+          [Service]
+          User=root
+          WorkingDirectory=$APP_DIR
+          EnvironmentFile=$APP_DIR/.env
+          ExecStart=$APP_DIR/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:80 --timeout 60 app:app
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          systemctl daemon-reload
+          systemctl enable diary.service
+          systemctl restart diary.service
+          echo "[+] Personal Diary deployed successfully!"
+
+Outputs:
+  ApplicationURL:
+    Description: Public HTTP URL for the Personal Diary Web Application
+    Value: !Sub "http://${EC2Instance.PublicIp}"
+
+  EC2PublicIP:
+    Description: Public IP Address of the EC2 Instance
+    Value: !GetAtt EC2Instance.PublicIp
+
+  EC2PrivateIP:
+    Description: Private IP of EC2 Instance in the Public Subnet
+    Value: !GetAtt EC2Instance.PrivateIp
+
+  RDSPrivateEndpoint:
+    Description: Private Hostname Endpoint of the RDS MySQL Database (Not accessible from Internet)
+    Value: !GetAtt RDSInstance.Endpoint.Address
+
+  S3BucketName:
+    Description: S3 Bucket Name used for storing diary images securely
+    Value: !Ref DiaryS3Bucket
+
+  VPCId:
+    Description: VPC ID
+    Value: !Ref VPC
